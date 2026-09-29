@@ -1,0 +1,126 @@
+import os
+from django.db import connection
+from google import genai
+from dotenv import load_dotenv
+
+load_dotenv()
+
+client = genai.Client(
+    api_key=os.getenv("GEMINI_API_KEY")
+)
+
+
+def generate_sql(user_query):
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT
+                table_name,
+                column_name,
+                data_type
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+            ORDER BY table_name, ordinal_position;
+        """)
+
+        tables = cursor.fetchall()
+
+    schema = "\n".join(
+        f"Table: {table}, Column: {column}, Type: {data_type}"
+        for table, column, data_type in tables
+    )
+
+    prompt = f"""
+You are an SQL generator.
+
+Database schema:
+{schema}
+
+User request:
+{user_query}
+
+Rules:
+- Generate PostgreSQL SQL only.
+- Use only tables and columns from the schema.
+- Do not generate DROP, ALTER, TRUNCATE, CREATE, GRANT or REVOKE.
+- SELECT, INSERT, UPDATE and DELETE are allowed.
+- Return only SQL.
+"""
+
+    response = client.models.generate_content(
+        model="gemini-3.6-flash",
+        contents=prompt
+    )
+
+    sql = response.text.strip()
+
+    # Remove Markdown code fences if Gemini returns them
+    if sql.startswith("```"):
+        sql = sql.replace("```sql", "")
+        sql = sql.replace("```SQL", "")
+        sql = sql.replace("```", "")
+        sql = sql.strip()
+
+    return sql
+
+def validate_sql(sql):
+    sql = sql.strip()
+
+    blocked = [
+        "DROP",
+        "ALTER",
+        "TRUNCATE",
+        "CREATE",
+        "GRANT",
+        "REVOKE"
+    ]
+
+    upper_sql = sql.upper()
+
+    for word in blocked:
+        if word in upper_sql:
+            raise ValueError(
+                f"{word} operation is not allowed."
+            )
+
+    return sql
+
+def execute_sql(sql):
+    with connection.cursor() as cursor:
+        cursor.execute(sql)
+
+        if sql.strip().upper().startswith("SELECT"):
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+
+            return [
+                dict(zip(columns, row))
+                for row in rows
+            ]
+
+        connection.commit()
+
+        return {
+            "message": "Operation successful",
+            "affected_rows": cursor.rowcount
+        }
+
+
+def ask_database(user_query):
+    sql = generate_sql(user_query)
+
+    sql = validate_sql(sql)
+
+    operation = sql.split()[0].upper()
+
+    if operation in ["INSERT", "UPDATE", "DELETE"]:
+        confirmation = input(
+            f"\nThis will execute:\n{sql}\n\n"
+            "Do you want to continue? (yes/no): "
+        )
+
+        if confirmation.lower() != "yes":
+            return {
+                "message": "Operation cancelled"
+            }
+
+    return execute_sql(sql)
