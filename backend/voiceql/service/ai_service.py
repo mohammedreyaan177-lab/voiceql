@@ -53,26 +53,17 @@ Rules:
 - Before generating INSERT or UPDATE, analyze whether the requested data or related data already exists.
 - Do not INSERT data that already exists.
 - Do not UPDATE data if the requested data is already in the desired state.
-- Return only SQL.
+- Before generating INSERT or UPDATE, check whether required information is missing.
+- Do not invent missing values.
+- If required information is missing, return:
+
+MISSING_COLUMNS: [column1, column2]
+
+- Otherwise return only the SQL query.
 """
 
     client = Groq(api_key=api_key)
 
-    def generate_text(prompt):
-        response = client.chat.completions.create(
-            model="openai/gpt-oss-120b",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            temperature=0
-        )
-
-        return response.choices[0].message.content
-
-    # Added Groq response handling
     response = client.chat.completions.create(
         model="openai/gpt-oss-120b",
         messages=[
@@ -86,7 +77,6 @@ Rules:
 
     sql = response.choices[0].message.content.strip()
 
-    # Remove Markdown code fences if Gemini returns them
     if sql.startswith("```"):
         sql = sql.replace("```sql", "")
         sql = sql.replace("```SQL", "")
@@ -94,6 +84,7 @@ Rules:
         sql = sql.strip()
 
     return sql
+
 
 def validate_sql(sql):
     sql = sql.strip()
@@ -116,6 +107,7 @@ def validate_sql(sql):
             )
 
     return sql
+
 
 def execute_sql(sql):
     with connection.cursor() as cursor:
@@ -152,6 +144,18 @@ def ask_database(user_query):
         }
 
     sql = generate_sql(user_query)
+
+    if sql.startswith("MISSING_COLUMNS:"):
+
+        missing_columns = sql.replace(
+            "MISSING_COLUMNS:",
+            ""
+        ).strip()
+
+        return {
+            "status": "missing_information",
+            "missing_columns": missing_columns
+        }
 
     sql = validate_sql(sql)
 
