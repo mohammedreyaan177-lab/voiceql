@@ -1,14 +1,21 @@
 import os
 from django.db import connection
-from google import genai
+from groq import Groq
 from dotenv import load_dotenv
-
+from .metricservice import calculate_metric, find_metric
 load_dotenv()
 
-client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
 
+#-----------------------------------------------------#
+
+#GroqAI Service
+api_key = os.getenv("GROQ_API_KEY")
+
+if not api_key:
+    raise ValueError("GROQ_API_KEY is not configured")
+
+
+#----------------------------------------------------------#
 
 def generate_sql(user_query):
     with connection.cursor() as cursor:
@@ -43,15 +50,41 @@ Rules:
 - Use only tables and columns from the schema.
 - Do not generate DROP, ALTER, TRUNCATE, CREATE, GRANT or REVOKE.
 - SELECT, INSERT, UPDATE and DELETE are allowed.
+- Before generating INSERT or UPDATE, analyze whether the requested data or related data already exists.
+- Do not INSERT data that already exists.
+- Do not UPDATE data if the requested data is already in the desired state.
 - Return only SQL.
 """
 
-    response = client.models.generate_content(
-        model="gemini-3.6-flash",
-        contents=prompt
+    client = Groq(api_key=api_key)
+
+    def generate_text(prompt):
+        response = client.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0
+        )
+
+        return response.choices[0].message.content
+
+    # Added Groq response handling
+    response = client.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        temperature=0
     )
 
-    sql = response.text.strip()
+    sql = response.choices[0].message.content.strip()
 
     # Remove Markdown code fences if Gemini returns them
     if sql.startswith("```"):
@@ -106,6 +139,18 @@ def execute_sql(sql):
 
 
 def ask_database(user_query):
+
+    metric_name = find_metric(user_query)
+
+    if metric_name:
+
+        result = calculate_metric(metric_name)
+
+        return {
+            "metric": metric_name,
+            "value": result
+        }
+
     sql = generate_sql(user_query)
 
     sql = validate_sql(sql)

@@ -1,9 +1,7 @@
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import sales
 from .service.ai_service import ask_database
-
 
 
 #Health Endpoint
@@ -14,7 +12,6 @@ def health(request):
 
 
 #Data Through API
-
 @api_view(['POST'])
 def ask_ai(request):
     data = request.data.get("user_query")
