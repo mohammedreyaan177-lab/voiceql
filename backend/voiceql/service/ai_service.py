@@ -58,10 +58,18 @@ Rules:
 - Do not UPDATE data if the requested data is already in the desired state.
 - Before generating INSERT or UPDATE, check whether required information is missing.
 - Do not invent missing values.
+- Primary key columns named "id" are auto-generated serial/identity columns.
+- Never ask the user to provide an "id" value for INSERT operations.
+- Never include the "id" column in an INSERT statement unless the user explicitly requests a specific id.
+- For text/string comparisons in WHERE clauses, use case-insensitive comparison.
+- Prefer LOWER(column) = LOWER(value) when comparing text values.
+- Do not rely on the capitalization used in the user's request to identify existing records.
+- For UPDATE and DELETE operations, match existing text values case-insensitively.
 - If required information is missing, return:
 
 MISSING_COLUMNS: [column1, column2]
 
+- Do not include auto-generated "id" columns in MISSING_COLUMNS.
 - Otherwise return only the SQL query.
 - Return exactly ONE SQL statement and nothing else.
 - If the request does not name a table, query the main application table.
