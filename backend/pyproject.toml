@@ -3,9 +3,11 @@ name = "voiceql"
 version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
+    "av<19",
     "django>=6.1.1",
     "djangorestframework>=3.18.1",
     "dotenv>=0.9.9",
+    "faster-whisper>=1.2.1",
     "google-genai>=2.25.0",
     "groq>=1.7.0",
     "openai>=3.22.1",

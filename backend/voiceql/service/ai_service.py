@@ -3,6 +3,7 @@ from django.db import connection
 from groq import Groq
 from dotenv import load_dotenv
 from .metricservice import calculate_metric, find_metric
+from .voiceservice import transcribe_audio
 load_dotenv()
 
 
@@ -26,6 +27,8 @@ def generate_sql(user_query):
                 data_type
             FROM information_schema.columns
             WHERE table_schema = 'public'
+            AND table_name NOT LIKE 'django_%'
+            AND table_name NOT LIKE 'auth_%'
             ORDER BY table_name, ordinal_position;
         """)
 
@@ -60,6 +63,8 @@ Rules:
 MISSING_COLUMNS: [column1, column2]
 
 - Otherwise return only the SQL query.
+- Return exactly ONE SQL statement and nothing else.
+- If the request does not name a table, query the main application table.
 """
 
     client = Groq(api_key=api_key)
@@ -158,6 +163,12 @@ def ask_database(user_query):
         }
 
     sql = validate_sql(sql)
+
+    if not sql:
+        return {
+            "status": "error",
+            "message": "The AI returned an empty query. Please rephrase your question."
+        }
 
     operation = sql.split()[0].upper()
 
