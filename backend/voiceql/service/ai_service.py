@@ -19,6 +19,27 @@ if not api_key:
 #----------------------------------------------------------#
 
 def generate_sql(user_query):
+    dangerous_patterns = [
+        r"\bdelete\s+all\b",
+        r"\bdelete\s+everything\b",
+        r"\bdelete\s+all\s+products\b",
+        r"\bdelete\s+all\s+records\b",
+        r"\bclear\s+(the\s+)?table\b",
+        r"\bempty\s+(the\s+)?table\b",
+        r"\bdrop\s+(the\s+)?table\b",
+        r"\bdrop\s+(the\s+)?database\b",
+        r"\btruncate\b",
+        r"\b1\s*=\s*1\b",
+        r"\b0\s*=\s*0\b",
+        r"\bdelete\b.*\btrue\b",
+    ]
+
+    for pattern in dangerous_patterns:
+        if re.search(pattern, user_query, re.IGNORECASE):
+            raise ValueError(
+                "Unsafe SQL operation detected."
+            )
+
     with connection.cursor() as cursor:
         cursor.execute("""
             SELECT
@@ -66,6 +87,9 @@ MULTIPLE INSERT VALIDATION:
 - When the user requests multiple products or multiple records to be inserted, validate EVERY record individually before generating INSERT statements.
 - Check whether each requested record already exists in the database.
 - Perform existence checks case-insensitively for text fields.
+- For product names, ignore all spaces and whitespace when comparing.
+- Treat product names as the same if they differ only by capitalization or spaces.
+- For example, "Acer Aspire 5", "acer aspire 5", "AcerAspire5" and "ACER  ASPIRE  5" must be treated as the same product.
 - Do not INSERT a record if the same record already exists.
 - Do not assume that one existing record means all requested records already exist.
 - Insert only the records that do not already exist.
@@ -75,20 +99,46 @@ MULTIPLE INSERT VALIDATION:
 INSERT VALIDATION:
 - Before generating INSERT statements, analyze whether the requested data or related data already exists.
 - Do not INSERT data that already exists.
+- For product names, ignore spaces and capitalization when checking for duplicates.
 - Before generating INSERT statements, check whether required information is missing.
 - Do not invent missing values.
+- Product names inserted into the database must be lowercase and must not contain spaces or whitespace.
+- Remove all spaces and whitespace from the product name before generating the INSERT statement.
+- For example:
+  - "Acer Aspire 5" must be inserted as "aceraspire5".
+  - "ACER ASPIRE 5" must be inserted as "aceraspire5".
+  - "acer aspire 5" must be inserted as "aceraspire5".
+  - "AcerAspire5" must be inserted as "aceraspire5".
 
 UPDATE VALIDATION:
 - Before generating UPDATE statements, check whether the requested record exists.
+- For product names, compare case-insensitively and ignore all spaces and whitespace.
 - Do not UPDATE data if the requested data is already in the desired state.
 - If the record does not exist, do not invent a record to update.
 - Before generating UPDATE statements, check whether required information is missing.
 - Do not invent missing values.
+- When updating a product name, store the product name in lowercase with no spaces or whitespace.
+- For example:
+  - "Acer Aspire 5" must become "aceraspire5".
+  - "ACER ASPIRE 5" must become "aceraspire5".
+  - "acer aspire 5" must become "aceraspire5".
+- When updating a product's price, rating, or other fields, modify only the fields requested by the user.
 
 DELETE VALIDATION:
 - Before generating DELETE statements, check whether the requested record exists.
 - If the requested record does not exist, do not generate a DELETE statement for it.
 - Match existing text values case-insensitively.
+- For product names, ignore all spaces and whitespace when comparing.
+- Never generate DELETE without WHERE.
+- Never generate DELETE using always-true conditions such as:
+  - 1=1
+  - 0=0
+  - TRUE
+  - FALSE=FALSE
+  - NOT FALSE
+  - equivalent always-true conditions
+- Never generate SQL that deletes every record from a table.
+- Never generate SQL that deletes the entire database.
 
 PRIMARY KEY:
 - Primary key columns named "id" are auto-generated serial/identity columns.
@@ -97,10 +147,22 @@ PRIMARY KEY:
 - Do not include auto-generated "id" columns in MISSING_COLUMNS.
 
 TEXT COMPARISON:
-- For text/string comparisons in WHERE clauses, use case-insensitive comparison.
-- Prefer LOWER(column) = LOWER(value) when comparing text values.
-- Do not rely on the capitalization used in the user's request to identify existing records.
-- For INSERT, UPDATE and DELETE validation, compare relevant text fields case-insensitively.
+- For normal text/string comparisons in WHERE clauses, use case-insensitive comparison.
+- For product name comparisons, ignore all spaces and whitespace.
+- When comparing product names, remove spaces from BOTH the database column value and the user's requested product name before comparing.
+- Product name comparisons must use PostgreSQL REPLACE().
+- Use this pattern for product name comparisons:
+
+LOWER(REPLACE(product, ' ', '')) = LOWER(REPLACE('user product name', ' ', ''))
+
+- Treat these as the same product:
+  - "Acer Aspire 5"
+  - "acer aspire 5"
+  - "AcerAspire5"
+  - "ACER  ASPIRE  5"
+  - "aCeR aSpIrE 5"
+- Do not remove spaces from other text fields unless explicitly required.
+- Preserve lowercase and no-space format for product names when inserting or updating.
 
 MISSING INFORMATION:
 - If required information is missing for an operation, return:
@@ -132,6 +194,22 @@ Process:
 4. Insert only the products that do not already exist.
 5. Do not ask for id values.
 6. Do not insert products that already exist.
+
+PRODUCT NAME EXAMPLE:
+User request:
+"Delete aceraspire5"
+
+If the database contains:
+"Acer Aspire 5"
+
+Treat them as the same product.
+
+The comparison should use:
+
+LOWER(REPLACE(product, ' ', '')) =
+LOWER(REPLACE('aceraspire5', ' ', ''))
+
+Do not insert another record if it already exists.
 
 OUTPUT:
 - Return all valid SQL statements required for the user's request.
@@ -167,10 +245,19 @@ OUTPUT:
     return sql
 
 
+
+
+
+
+
 import re
 
-
 def validate_sql(sql):
+    if not sql or not sql.strip():
+        raise ValueError(
+            "AI returned an empty SQL query."
+        )
+
     sql = sql.strip()
 
     blocked = [
@@ -195,6 +282,11 @@ def validate_sql(sql):
         for statement in sql.split(";")
         if statement.strip()
     ]
+
+    if not statements:
+        raise ValueError(
+            "AI returned an empty SQL query."
+        )
 
     for statement in statements:
         upper_statement = statement.upper().strip()
@@ -236,6 +328,7 @@ def validate_sql(sql):
                 )
 
     return sql
+
 
 def execute_sql(sql):
     with connection.cursor() as cursor:
