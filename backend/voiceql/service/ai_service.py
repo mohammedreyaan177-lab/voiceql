@@ -167,6 +167,9 @@ OUTPUT:
     return sql
 
 
+import re
+
+
 def validate_sql(sql):
     sql = sql.strip()
 
@@ -182,13 +185,57 @@ def validate_sql(sql):
     upper_sql = sql.upper()
 
     for word in blocked:
-        if word in upper_sql:
+        if re.search(rf"\b{word}\b", upper_sql):
             raise ValueError(
                 f"{word} operation is not allowed."
             )
 
-    return sql
+    statements = [
+        statement.strip()
+        for statement in sql.split(";")
+        if statement.strip()
+    ]
 
+    for statement in statements:
+        upper_statement = statement.upper().strip()
+
+        if upper_statement.startswith("DELETE"):
+            if not re.search(r"\bWHERE\b", upper_statement):
+                raise ValueError(
+                    "DELETE operation must include a WHERE condition."
+                )
+
+            dangerous_conditions = [
+                r"\b1\s*=\s*1\b",
+                r"\b0\s*=\s*0\b",
+                r"\bTRUE\b",
+                r"\bFALSE\s*=\s*FALSE\b",
+                r"\bNOT\s+FALSE\b",
+                r"\b1\s*<\s*2\b",
+                r"\b2\s*>\s*1\b",
+            ]
+
+            for pattern in dangerous_conditions:
+                if re.search(pattern, upper_statement):
+                    raise ValueError(
+                        "Unsafe DELETE condition detected."
+                    )
+
+            where_part = re.split(
+                r"\bWHERE\b",
+                upper_statement,
+                maxsplit=1
+            )[1]
+
+            if re.search(
+                r"(['\"])\s*=\s*\1",
+                where_part
+            ):
+                raise ValueError(
+                    "Unsafe DELETE condition detected."
+                )
+
+    return sql
 
 def execute_sql(sql):
     with connection.cursor() as cursor:
