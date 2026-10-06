@@ -135,3 +135,23 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+        "file": {
+            "class": "logging.FileHandler",
+            "filename": os.path.join(BASE_DIR, "voiceql.log"),
+        },
+    },
+    "loggers": {
+        "voiceql": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+        },
+    },
+}

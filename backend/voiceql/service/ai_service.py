@@ -1,22 +1,27 @@
 import os
+import re
+import logging
 from django.db import connection
 from groq import Groq
 from dotenv import load_dotenv
 from .metricservice import calculate_metric, find_metric
 from .voiceservice import transcribe_audio
+
 load_dotenv()
 
+logger = logging.getLogger("voiceql")
 
-#-----------------------------------------------------#
+# -----------------------------------------------------#
 
-#GroqAI Service
+# GroqAI Service
 api_key = os.getenv("GROQ_API_KEY")
 
 if not api_key:
+    logger.critical("GROQ_API_KEY missing")
     raise ValueError("GROQ_API_KEY is not configured")
 
 
-#----------------------------------------------------------#
+# ----------------------------------------------------------#
 
 def generate_sql(user_query):
     dangerous_patterns = [
@@ -36,24 +41,29 @@ def generate_sql(user_query):
 
     for pattern in dangerous_patterns:
         if re.search(pattern, user_query, re.IGNORECASE):
+            logger.warning("Unsafe pattern detected")
             raise ValueError(
                 "Unsafe SQL operation detected."
             )
 
-    with connection.cursor() as cursor:
-        cursor.execute("""
-            SELECT
-                table_name,
-                column_name,
-                data_type
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-            AND table_name NOT LIKE 'django_%'
-            AND table_name NOT LIKE 'auth_%'
-            ORDER BY table_name, ordinal_position;
-        """)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT
+                    table_name,
+                    column_name,
+                    data_type
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                AND table_name NOT LIKE 'django_%'
+                AND table_name NOT LIKE 'auth_%'
+                ORDER BY table_name, ordinal_position;
+            """)
 
-        tables = cursor.fetchall()
+            tables = cursor.fetchall()
+    except Exception as e:
+        logger.error(f"Failed to fetch schema: {e}")
+        raise
 
     schema = "\n".join(
         f"Table: {table}, Column: {column}, Type: {data_type}"
@@ -221,20 +231,24 @@ OUTPUT:
 - If the request does not name a table, query the main application table.
 """
 
-    client = Groq(api_key=api_key)
+    try:
+        client = Groq(api_key=api_key)
 
-    response = client.chat.completions.create(
-        model="openai/gpt-oss-120b",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        temperature=0
-    )
+        response = client.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0
+        )
 
-    sql = response.choices[0].message.content.strip()
+        sql = response.choices[0].message.content.strip()
+    except Exception as e:
+        logger.error(f"SQL generation failed: {e}")
+        raise
 
     if sql.startswith("```"):
         sql = sql.replace("```sql", "")
@@ -242,18 +256,13 @@ OUTPUT:
         sql = sql.replace("```", "")
         sql = sql.strip()
 
+    logger.info(f"Generated SQL: {sql}")
     return sql
 
 
-
-
-
-
-
-import re
-
 def validate_sql(sql):
     if not sql or not sql.strip():
+        logger.warning("Empty SQL query")
         raise ValueError(
             "AI returned an empty SQL query."
         )
@@ -273,6 +282,7 @@ def validate_sql(sql):
 
     for word in blocked:
         if re.search(rf"\b{word}\b", upper_sql):
+            logger.warning(f"Blocked word: {word}")
             raise ValueError(
                 f"{word} operation is not allowed."
             )
@@ -284,6 +294,7 @@ def validate_sql(sql):
     ]
 
     if not statements:
+        logger.warning("No valid statements")
         raise ValueError(
             "AI returned an empty SQL query."
         )
@@ -293,6 +304,7 @@ def validate_sql(sql):
 
         if upper_statement.startswith("DELETE"):
             if not re.search(r"\bWHERE\b", upper_statement):
+                logger.warning("DELETE missing WHERE")
                 raise ValueError(
                     "DELETE operation must include a WHERE condition."
                 )
@@ -309,6 +321,7 @@ def validate_sql(sql):
 
             for pattern in dangerous_conditions:
                 if re.search(pattern, upper_statement):
+                    logger.warning("Unsafe DELETE condition")
                     raise ValueError(
                         "Unsafe DELETE condition detected."
                     )
@@ -323,6 +336,7 @@ def validate_sql(sql):
                 r"(['\"])\s*=\s*\1",
                 where_part
             ):
+                logger.warning("Unsafe DELETE condition")
                 raise ValueError(
                     "Unsafe DELETE condition detected."
                 )
@@ -331,72 +345,92 @@ def validate_sql(sql):
 
 
 def execute_sql(sql):
-    with connection.cursor() as cursor:
-        cursor.execute(sql)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
 
-        if sql.strip().upper().startswith("SELECT"):
-            columns = [desc[0] for desc in cursor.description]
-            rows = cursor.fetchall()
+            if sql.strip().upper().startswith("SELECT"):
+                columns = [desc[0] for desc in cursor.description]
+                rows = cursor.fetchall()
 
-            return [
-                dict(zip(columns, row))
-                for row in rows
-            ]
+                logger.info(f"SELECT returned {len(rows)} rows")
+                return [
+                    dict(zip(columns, row))
+                    for row in rows
+                ]
 
-        connection.commit()
+            connection.commit()
 
-        return {
-            "message": "Operation successful",
-            "affected_rows": cursor.rowcount
-        }
+            logger.info("SQL executed successfully")
+            return {
+                "message": "Operation successful",
+                "affected_rows": cursor.rowcount
+            }
+    except Exception as e:
+        logger.error(f"SQL execution failed: {e}")
+        raise
 
 
 def ask_database(user_query):
+    try:
+        metric_name = find_metric(user_query)
 
-    metric_name = find_metric(user_query)
+        if metric_name:
+            logger.info(f"Found metric: {metric_name}")
+            result = calculate_metric(metric_name)
 
-    if metric_name:
-
-        result = calculate_metric(metric_name)
-
-        return {
-            "metric": metric_name,
-            "value": result
-        }
-
-    sql = generate_sql(user_query)
-
-    if sql.startswith("MISSING_COLUMNS:"):
-
-        missing_columns = sql.replace(
-            "MISSING_COLUMNS:",
-            ""
-        ).strip()
-
-        return {
-            "status": "missing_information",
-            "missing_columns": missing_columns
-        }
-
-    sql = validate_sql(sql)
-
-    if not sql:
-        return {
-            "status": "error",
-            "message": "The AI returned an empty query. Please rephrase your question."
-        }
-
-    operation = sql.split()[0].upper()
-
-    if operation in ["INSERT", "UPDATE", "DELETE"]:
-        confirmation = input(
-            f"\nThis will execute:\n{sql}\n\n"
-            "Do you want to continue? (yes/no): "
-        )
-
-        if confirmation.lower() != "yes":
             return {
-                "message": "Operation cancelled"
+                "metric": metric_name,
+                "value": result
             }
 
-    return execute_sql(sql)
+        sql = generate_sql(user_query)
+
+        if sql.startswith("MISSING_COLUMNS:"):
+            missing_columns = sql.replace(
+                "MISSING_COLUMNS:",
+                ""
+            ).strip()
+
+            logger.info(f"Missing columns: {missing_columns}")
+            return {
+                "status": "missing_information",
+                "missing_columns": missing_columns
+            }
+
+        sql = validate_sql(sql)
+
+        if not sql:
+            logger.warning("Empty SQL generated")
+            return {
+                "status": "error",
+                "message": "The AI returned an empty query. Please rephrase your question."
+            }
+
+        operation = sql.split()[0].upper()
+
+        if operation in ["INSERT", "UPDATE", "DELETE"]:
+            confirmation = input(
+                f"\nThis will execute:\n{sql}\n\n"
+                "Do you want to continue? (yes/no): "
+            )
+
+            if confirmation.lower() != "yes":
+                logger.info("Operation cancelled by user")
+                return {
+                    "message": "Operation cancelled"
+                }
+
+        return execute_sql(sql)
+    except ValueError as e:
+        logger.warning(f"Validation error: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+    except Exception as e:
+        logger.error(f"Ask database failed: {e}")
+        return {
+            "status": "error",
+            "message": "An error occurred while processing your request."
+        }

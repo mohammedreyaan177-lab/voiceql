@@ -1,0 +1,5 @@
+POST /ask query='delete products named realme15'
+Generated SQL: DELETE FROM voiceql_sales
+WHERE LOWER(REPLACE(products, ' ', '')) = LOWER(REPLACE('realme15', ' ', ''));
+SQL executed successfully
+POST /ask success
