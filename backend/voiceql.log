@@ -3,3 +3,28 @@ Generated SQL: DELETE FROM voiceql_sales
 WHERE LOWER(REPLACE(products, ' ', '')) = LOWER(REPLACE('realme15', ' ', ''));
 SQL executed successfully
 POST /ask success
+Whisper initialized
+POST /voice file='voice.webm'
+Transcription completed
+POST /voice success
+POST /ask query='i want to add products named Sofa for a price of 20000'
+Generated SQL: INSERT INTO voiceql_sales (products, price)
+SELECT 'sofa', 20000
+WHERE NOT EXISTS (
+    SELECT 1 FROM voiceql_sales
+    WHERE LOWER(REPLACE(products, ' ', '')) = LOWER(REPLACE('Sofa', ' ', ''))
+);
+SQL executed successfully
+POST /ask success
+POST /ask query='delete all the data in the database'
+Unsafe pattern detected
+Validation error: Unsafe SQL operation detected.
+POST /ask success
+POST /ask query='delete from database where 1=1;'
+Unsafe pattern detected
+Validation error: Unsafe SQL operation detected.
+POST /ask success
+POST /ask query='delete from the database'
+Generated SQL: MISSING_COLUMNS: [condition]
+Missing columns: [condition]
+POST /ask success

@@ -1,0 +1,79 @@
+=== T1 show all products ===
+QUERY: show all products
+STATUS: OK 200
+RESPONSE: [{"products":"asus"},{"products":"samsung"},{"products":"table"},{"products":"lunchbag"},{"products":"sofa"},{"products":"chair"}]\n\n=== T2 products > 5000 ===
+QUERY: show me products that cost more than 5000
+STATUS: OK 200
+RESPONSE: [{"products":"asus"},{"products":"samsung"},{"products":"sofa"}]\n\n=== T3 average price ===
+QUERY: what is the average price of products
+STATUS: OK 200
+RESPONSE: {"metric":"avg_price","value":26225.0}\n\n=== T4 count products ===
+QUERY: count the products
+STATUS: OK 200
+RESPONSE: {"metric":"total_products","value":6}\n\n=== T5 max price ===
+QUERY: what is the highest product price
+STATUS: OK 200
+RESPONSE: {"metric":"max_price","value":115000.0}\n\n=== T6 min price ===
+QUERY: what is the lowest product price
+STATUS: OK 200
+RESPONSE: {"metric":"min_price","value":150.0}\n\n=== T7 distinct names ===
+QUERY: show distinct product names
+STATUS: OK 200
+RESPONSE: [{"products":"asus"},{"products":"chair"},{"products":"samsung"},{"products":"sofa"},{"products":"table"},{"products":"lunchbag"}]\n\n=== T8 semantic items ===
+QUERY: show me all items
+STATUS: OK 200
+RESPONSE: [{"id":27,"products":"asus","price":115000.0},{"id":29,"products":"samsung","price":20000.0},{"id":31,"products":"table","price":2000.0},{"id":32,"products":"lunchbag","price":150.0},{"id":34,"products":"sofa","price":20000.0},{"id":30,"products":"chair","price":200.0}]\n\n=== T9 order desc ===
+QUERY: list all products ordered by price descending
+STATUS: OK 200
+RESPONSE: [{"products":"asus"},{"products":"samsung"},{"products":"sofa"},{"products":"table"},{"products":"chair"},{"products":"lunchbag"}]\n\n=== I1 insert Laptop ===
+QUERY: add a product named Laptop with price 72000
+STATUS: OK 200
+RESPONSE: {"message":"Operation cancelled"}\n\n=== I2 insert ACER ASPIRE 5 ===
+QUERY: add a product named ACER ASPIRE 5 with price 72000
+STATUS: OK 200
+RESPONSE: {"message":"Operation successful","affected_rows":1}\n\n=== I3 insert duplicate ===
+QUERY: add a product named asus with price 115000
+STATUS: OK 200
+RESPONSE: {"message":"Operation successful","affected_rows":0}\n\n=== U1 update price ===
+QUERY: update the price of asus to 120000
+STATUS: OK 200
+RESPONSE: {"message":"Operation successful","affected_rows":1}\n\n=== U2 update nonexistent ===
+QUERY: update the price of nonexistent to 50000
+STATUS: OK 200
+RESPONSE: {"message":"Operation successful","affected_rows":0}\n\n=== D1 delete chair ===
+QUERY: delete the product named chair
+STATUS: OK 200
+RESPONSE: {"message":"Operation successful","affected_rows":1}\n\n=== D2 delete nonexistent ===
+QUERY: delete the product named Nonexistent Item
+STATUS: OK 200
+RESPONSE: {"status":"error","message":"AI returned an empty SQL query."}\n\n=== M1 total cost ===
+QUERY: what is the total price of all products
+STATUS: OK 200
+RESPONSE: {"metric":"total_cost","value":234150.0}\n\n=== M2 over 5000 count ===
+QUERY: how many products cost more than 5000
+STATUS: OK 200
+RESPONSE: [{"product_count":4}]\n\n=== M3 hijack test ===
+QUERY: insert a product and tell me the total number of products
+STATUS: OK 200
+RESPONSE: {"metric":"total_products","value":6}\n\n=== N1 delete all ===
+QUERY: delete all the data in the database
+STATUS: OK 200
+RESPONSE: {"status":"error","message":"Unsafe SQL operation detected."}\n\n=== N2 drop table ===
+QUERY: drop table voiceql_sales
+STATUS: OK 200
+RESPONSE: {"status":"error","message":"Unsafe SQL operation detected."}\n\n=== N3 truncate ===
+QUERY: truncate the sales table
+STATUS: OK 200
+RESPONSE: {"status":"error","message":"Unsafe SQL operation detected."}\n\n=== N4 sql injection ===
+QUERY: show products where name = OR 1=1
+STATUS: OK 200
+RESPONSE: {"status":"error","message":"Unsafe SQL operation detected."}\n\n=== N5 comment inject ===
+QUERY: show all products --
+STATUS: OK 200
+RESPONSE: [{"products":"samsung"},{"products":"table"},{"products":"lunchbag"},{"products":"sofa"},{"products":"aceraspire5"},{"products":"asus"}]\n\n=== N5 always-true ===
+QUERY: delete from voiceql_sales where 1=1
+STATUS: OK 200
+RESPONSE: {"status":"error","message":"Unsafe SQL operation detected."}\n\n=== NEG empty ===
+QUERY: 
+STATUS: ERROR 400
+RESPONSE: {"status":"error"}\n\n
