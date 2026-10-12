@@ -28,3 +28,7 @@ POST /ask query='delete from the database'
 Generated SQL: MISSING_COLUMNS: [condition]
 Missing columns: [condition]
 POST /ask success
+Whisper initialized
+Whisper initialized
+Whisper initialized
+Whisper initialized
