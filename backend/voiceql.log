@@ -32,3 +32,46 @@ Whisper initialized
 Whisper initialized
 Whisper initialized
 Whisper initialized
+Whisper initialized
+Whisper initialized
+Whisper initialized
+Whisper initialized
+Whisper initialized
+POST /ask query='i want to add a product name charger of price 200 rs'
+Metric search failed: Error code: 401 - {'error': {'message': 'Invalid API Key', 'type': 'invalid_request_error', 'code': 'invalid_api_key'}}
+SQL generation failed: Error code: 401 - {'error': {'message': 'Invalid API Key', 'type': 'invalid_request_error', 'code': 'invalid_api_key'}}
+Ask database failed: Error code: 401 - {'error': {'message': 'Invalid API Key', 'type': 'invalid_request_error', 'code': 'invalid_api_key'}}
+POST /ask success
+POST /ask query='i want to add a product charger of price rs 200'
+Metric search failed: Error code: 401 - {'error': {'message': 'Invalid API Key', 'type': 'invalid_request_error', 'code': 'invalid_api_key'}}
+SQL generation failed: Error code: 401 - {'error': {'message': 'Invalid API Key', 'type': 'invalid_request_error', 'code': 'invalid_api_key'}}
+Ask database failed: Error code: 401 - {'error': {'message': 'Invalid API Key', 'type': 'invalid_request_error', 'code': 'invalid_api_key'}}
+POST /ask success
+Whisper initialized
+POST /ask query='can you get me all the data present in the database?'
+Generated SQL: SELECT * FROM voiceql_sales;
+SELECT returned 6 rows
+POST /ask success
+POST /ask query='i want you to add a product named charger of price 500'
+Generated SQL: INSERT INTO voiceql_sales (products, price)
+SELECT 'charger', 500
+WHERE NOT EXISTS (
+    SELECT 1 FROM voiceql_sales
+    WHERE LOWER(REPLACE(products, ' ', '')) = LOWER(REPLACE('charger', ' ', ''))
+);
+SQL executed successfully
+POST /ask success
+POST /ask query='give me all products'
+Generated SQL: SELECT products FROM voiceql_sales;
+SELECT returned 7 rows
+POST /ask success
+POST /ask query='give me the avg value of this database'
+Found metric: avg_price
+Calculated metric: avg_price
+POST /ask success
+Whisper initialized
+Whisper initialized
+Whisper initialized
+Whisper initialized
+Whisper initialized
+Whisper initialized

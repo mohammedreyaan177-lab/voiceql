@@ -10,6 +10,7 @@ unapproved preflight request can return HTTP 200 and still correctly withhold
 report a false pass.
 """
 
+import importlib
 import json
 import os
 import subprocess
@@ -71,21 +72,24 @@ class CorsMiddlewareIsTheOnlyImplementationTests(TestCase):
         # The frontend uses credentials:"omit", so this must stay False.
         self.assertFalse(settings.CORS_ALLOW_CREDENTIALS)
 
-    def test_deprecated_custom_middleware_raises_if_used(self):
-        from config.cors import CorsMiddleware as RemovedMiddleware
+    def test_removed_wildcard_middleware_module_is_gone(self):
+        # The hand-rolled Access-Control-Allow-Origin: * middleware was deleted
+        # outright. It must not be possible to import it any more.
+        with self.assertRaises(ImportError):
+            importlib.import_module("config.cors")
 
-        with self.assertRaises(RuntimeError):
-            RemovedMiddleware(lambda request: None)
+    def test_removed_wildcard_settings_module_is_gone(self):
+        with self.assertRaises(ImportError):
+            importlib.import_module("config.cors_settings")
 
     def test_deprecated_settings_module_is_rejected(self):
+        # Even though the module file is deleted, selecting it by name must
+        # still fail loudly instead of silently changing the CORS policy.
         with mock.patch.dict(
             "os.environ", {"DJANGO_SETTINGS_MODULE": "config.cors_settings"}
         ):
             with self.assertRaises(RuntimeError):
-                import config  # noqa: F401
-                import importlib
-
-                importlib.reload(config)
+                importlib.reload(importlib.import_module("config"))
 
 
 @override_settings(
@@ -493,15 +497,31 @@ class EntrypointSelectionTests(SimpleTestCase):
         path = Path(settings.BASE_DIR) / name
         return path.read_text(encoding="utf-8")
 
-    def test_entrypoints_default_to_base_settings(self):
-        for name in self.ENTRYPOINTS:
+    def test_ordinary_development_command_uses_development_settings(self):
+        # The everyday `manage.py runserver` must land on the development
+        # policy without the developer having to export anything.
+        source = self._entrypoint_source("manage.py")
+        self.assertRegex(
+            source,
+            r"os\.environ\.setdefault\(\s*['\"]DJANGO_SETTINGS_MODULE['\"]\s*,"
+            r"\s*['\"]config\.development_settings['\"]",
+        )
+
+    def test_production_entrypoints_never_default_to_development(self):
+        # wsgi/asgi must not silently fall back to the permissive dev policy.
+        for name in ("config/wsgi.py", "config/asgi.py"):
             with self.subTest(entrypoint=name):
                 source = self._entrypoint_source(name)
-                self.assertIn(
-                    "os.environ.setdefault('DJANGO_SETTINGS_MODULE'",
-                    source,
-                )
                 self.assertIn("config.settings", source)
+                self.assertNotIn("development_settings", source)
+
+    def test_all_entrypoints_use_setdefault_for_the_settings_module(self):
+        for name in self.ENTRYPOINTS:
+            with self.subTest(entrypoint=name):
+                self.assertRegex(
+                    self._entrypoint_source(name),
+                    r"os\.environ\.setdefault\(\s*['\"]DJANGO_SETTINGS_MODULE['\"]",
+                )
 
     def test_entrypoints_do_not_reference_the_removed_middleware(self):
         for name in self.ENTRYPOINTS:
@@ -514,11 +534,7 @@ class EntrypointSelectionTests(SimpleTestCase):
     def test_only_base_settings_module_owns_the_middleware_stack(self):
         # development/production inherit it via `from .settings import *` and
         # must not redefine it, so there is exactly one middleware definition.
-        for name in (
-            "development_settings.py",
-            "production_settings.py",
-            "cors_settings.py",
-        ):
+        for name in ("development_settings.py", "production_settings.py"):
             with self.subTest(module=name):
                 source = (
                     Path(settings.BASE_DIR) / "config" / name

@@ -1,21 +1,3 @@
-"""
-Base settings for the VoiceQL project.
-
-This module holds everything that is genuinely shared between development and
-production. It does **not** decide which origins are allowed - that policy lives
-in ``config/cors_config.py`` and is applied by ``config.development_settings``
-and ``config.production_settings``.
-
-Entry points (manage.py / wsgi.py / asgi.py) all load *this* module by
-default. Development adds its origin allowlist via
-``DJANGO_SETTINGS_MODULE=config.development_settings``; production adds the
-validated HTTPS allowlist via ``config.production_settings``.
-
-Important: ``DEBUG``, ``SECRET_KEY`` and ``ALLOWED_HOSTS`` are no longer
-hard-coded. They are read from the environment with safe defaults so that a
-production deployment cannot silently run in debug mode.
-"""
-
 from pathlib import Path
 
 import os

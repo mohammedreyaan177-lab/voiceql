@@ -31,7 +31,6 @@ CORS_PREFLIGHT_MAX_AGE = 600
 
 
 def allow_null_origin() -> bool:
-    """Return True only if ``null`` origins were explicitly opted into."""
     return os.environ.get(NULL_ORIGIN_ENV_VAR, "").strip().lower() in {
         "1",
         "true",

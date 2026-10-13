@@ -48,9 +48,6 @@ CORS_PREFLIGHT_MAX_AGE = CORS_PREFLIGHT_MAX_AGE
 CORS_EXPOSE_HEADERS = CORS_EXPOSE_HEADERS
 
 
-# --------------------------------------------------------------------------- #
-# Security hardening that only makes sense off-development
-# --------------------------------------------------------------------------- #
 
 ALLOWED_HOSTS = _env_list("DJANGO_ALLOWED_HOSTS")
 
